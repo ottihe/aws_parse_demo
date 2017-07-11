@@ -1,2 +1,2 @@
 # aws_parse_demo
-This project is to explore parse using aws as infrastructure
+This project is to explore parse server using aws as infrastructure
