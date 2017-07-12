@@ -1,0 +1,1069 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "VPC with public and private subnets, an IGW, route tables, ACLs. Still missing NAT GW for instances on private subnets",
+
+  "Parameters" : {
+
+    "AppStackName": {
+      "Type" : "String",
+      "MinLength": "1",
+      "MaxLength": "64",
+      "AllowedPattern" : "[a-zA-Z0-9][-_ a-zA-Z0-9]*",
+      "ConstraintDescription": "Must be between 2 and 20 characters long and may contain alphanumeric characters, hyphens (-), and underscores (_), but must start with alphanumeric.",
+      "Default": "Parse Server Test Stack"
+    },
+
+    "YourIP": {
+      "Description": "IP address to connect so SSH from. Check http://checkip.amazonaws.com/ to find yours.",
+      "Type": "String",
+      "MinLength": "10",
+      "MaxLength": "18",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+
+    "HostedZone" : {
+      "Description": "Hosted zone to use inside VPC",
+      "Type": "String"
+    }
+
+  },
+
+  "Metadata" : {
+    "AWS::CloudFormation::Interface" : {
+      "ParameterGroups" : [
+        {
+          "Label" : { "default" : "Application Test API" },
+          "Parameters" : [ "AppStackName" ]
+        }
+      ]
+    }
+  },
+
+  "Mappings" : {
+
+    "VPCIpSpace" : {
+      "us-east-1" : {"RANGE" : "10.42"},
+      "us-west-2" : {"RANGE" : "10.43"},
+      "us-west-1" : {"RANGE" : "10.44"},
+      "eu-west-1" : {"RANGE" : "10.45"},
+      "eu-central-1" : {"RANGE" : "10.46"},
+      "ap-southeast-1" : {"RANGE" : "10.47"},
+      "ap-northeast-1" : {"RANGE" : "10.48"},
+      "ap-southeast-2" : {"RANGE" : "10.49"},
+      "ap-northeast-2" : {"RANGE" : "10.50"},
+      "sa-east-1" : {"RANGE" : "10.51"}
+    },
+
+    "SubnetTypeIpRanges" : {
+      "public" : {"RANGE" : "0.0/17"},
+      "private" : {"RANGE" : "128.0/17"}
+    },
+
+    "publicSubnetConfig" : {
+      "publicSubnet01" : { "CIDR" : "10.0/24" },
+      "publicSubnet02" : { "CIDR" : "11.0/24" },
+      "publicSubnet03" : { "CIDR" : "12.0/24" }
+
+    },
+    "parsePublicSubnetConfig" : {
+      "parsePublicSubnet01" : { "CIDR" : "14.0/24" },
+      "parsePublicSubnet02" : { "CIDR" : "15.0/24" },
+      "parsePublicSubnet03" : { "CIDR" : "16.0/24" }
+
+    }
+  },
+
+  "Resources" : {
+    "MyVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              "0.0/16"
+            ]
+          ]
+        },
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "true",
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AppStackName"
+                  },
+                  "-VPC"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "parsePublicSubnet01": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "MapPublicIpOnLaunch": "true",
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              {
+                "Fn::FindInMap": [
+                  "parsePublicSubnetConfig",
+                  "parsePublicSubnet01",
+                  "CIDR"
+                ]
+              }
+            ]
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "0",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "SubnetType",
+            "Value": "Public"
+          },
+          {
+            "Key": "Name",
+            "Value": "parsePublicSubnet01"
+          }
+        ]
+      }
+    },
+    "parsePublicSubnet02": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "MapPublicIpOnLaunch": "true",
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              {
+                "Fn::FindInMap": [
+                  "parsePublicSubnetConfig",
+                  "parsePublicSubnet02",
+                  "CIDR"
+                ]
+              }
+            ]
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "1",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "SubnetType",
+            "Value": "Public"
+          },
+          {
+            "Key": "Name",
+            "Value": "parsePublicSubnet02"
+          }
+        ]
+      }
+    },
+    "parsePublicSubnet03": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "MapPublicIpOnLaunch": "true",
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              {
+                "Fn::FindInMap": [
+                  "parsePublicSubnetConfig",
+                  "parsePublicSubnet03",
+                  "CIDR"
+                ]
+              }
+            ]
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "2",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "SubnetType",
+            "Value": "Public"
+          },
+          {
+            "Key": "Name",
+            "Value": "parsePublicSubnet03"
+          }
+        ]
+      }
+    },
+    "publicSubnet01": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "MapPublicIpOnLaunch": "true",
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              {
+                "Fn::FindInMap": [
+                  "publicSubnetConfig",
+                  "publicSubnet01",
+                  "CIDR"
+                ]
+              }
+            ]
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "1",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "SubnetType",
+            "Value": "Public"
+          },
+          {
+            "Key": "Name",
+            "Value": "publicSubnet01"
+          }
+        ]
+      }
+    },
+    "publicSubnet02": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              {
+                "Fn::FindInMap": [
+                  "publicSubnetConfig",
+                  "publicSubnet02",
+                  "CIDR"
+                ]
+              }
+            ]
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "2",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "SubnetType",
+            "Value": "Public"
+          },
+          {
+            "Key": "Name",
+            "Value": "publicSubnet02"
+          }
+        ]
+      }
+    },
+    "publicSubnet03": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "CidrBlock": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::FindInMap": [
+                  "VPCIpSpace",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "RANGE"
+                ]
+              },
+              ".",
+              {
+                "Fn::FindInMap": [
+                  "publicSubnetConfig",
+                  "publicSubnet03",
+                  "CIDR"
+                ]
+              }
+            ]
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            "2",
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "SubnetType",
+            "Value": "Public"
+          },
+          {
+            "Key": "Name",
+            "Value": "publicSubnet03"
+          }
+        ]
+      }
+    },
+
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AppStackName"
+                  },
+                  "-IGW"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "AttachGateway": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AppStackName"
+                  },
+                  "-PublicRTbl"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "PublicRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "ParsePublicSubnetRTAssociation01": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "parsePublicSubnet01"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "ParsePublicSubnetRTAssociation02": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "parsePublicSubnet02"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "ParsePublicSubnetRTAssociation03": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "parsePublicSubnet03"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "PublicSubnetRTAssociation01": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "publicSubnet01"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "PublicSubnetRTAssociation02": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "publicSubnet02"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "PublicSubnetRTAssociation03": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "publicSubnet03"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+
+    "PublicNetworkAcl": {
+      "Type": "AWS::EC2::NetworkAcl",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AppStackName"
+                  },
+                  "-PublicNACL"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "InboundPublicNAclEntry": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        },
+        "RuleNumber": "2000",
+        "Protocol": "-1",
+        "RuleAction": "allow",
+        "Egress": "false",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "0",
+          "To": "65535"
+        }
+      }
+    },
+    "OutboundPublicNetworkAclEntry": {
+      "Type": "AWS::EC2::NetworkAclEntry",
+      "Properties": {
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        },
+        "RuleNumber": "2000",
+        "Protocol": "-1",
+        "RuleAction": "allow",
+        "Egress": "true",
+        "CidrBlock": "0.0.0.0/0",
+        "PortRange": {
+          "From": "0",
+          "To": "65535"
+        }
+      }
+    },
+    "parsePublicSubnetNetworkAclAssociation01": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "parsePublicSubnet01"
+        },
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        }
+      }
+    },
+    "parsePublicSubnetNetworkAclAssociation02": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "parsePublicSubnet02"
+        },
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        }
+      }
+    },
+    "parsePublicSubnetNetworkAclAssociation03": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "parsePublicSubnet03"
+        },
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        }
+      }
+    },
+    "publicSubnetNetworkAclAssociation01": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "publicSubnet01"
+        },
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        }
+      }
+    },
+    "publicSubnetNetworkAclAssociation02": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "publicSubnet02"
+        },
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        }
+      }
+    },
+    "publicSubnetNetworkAclAssociation03": {
+      "Type": "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "publicSubnet03"
+        },
+        "NetworkAclId": {
+          "Ref": "PublicNetworkAcl"
+        }
+      }
+    },
+
+    "ParseClientSG" : {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "For cliets that talk to parse code",
+        "VpcId": {
+            "Ref": "MyVPC"
+        },
+        "Tags": [
+            {
+              "Key": "AppStackName",
+              "Value": {
+                "Ref": "AppStackName"
+              }
+            },
+            {
+              "Key": "Name",
+              "Value" : "Parse Client SG"
+            }
+        ]
+      }
+    },
+
+    "ParseSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable HTTP access on port 80",
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "SecurityGroupIngress" : [
+         {
+              "IpProtocol" : "tcp",
+              "ToPort" : "1337",
+              "FromPort" : "1337",
+              "SourceSecurityGroupId" : {"Fn::GetAtt": ["ParseClientSG","GroupId"]}
+
+          },
+          {
+              "IpProtocol" : "tcp",
+              "ToPort" : "22",
+              "FromPort" : "22",
+              "CidrIp" : {"Ref" : "YourIP"}
+
+          },
+          {
+            "IpProtocol" : "tcp",
+            "FromPort" : "4040",
+            "ToPort" : "4040",
+            "SourceSecurityGroupId" : {"Fn::GetAtt": ["ParseClientSG","GroupId"]}
+          }
+        ],
+
+        "SecurityGroupEgress" : [
+
+          {
+            "IpProtocol" : "tcp",
+            "ToPort" : "27017",
+            "FromPort" : "27017",
+            "DestinationSecurityGroupId" : {"Fn::GetAtt": ["MongoDBSG","GroupId"]}
+          },
+          {
+            "IpProtocol" : "udp",
+            "ToPort" : "123",
+            "FromPort" : "123",
+            "CidrIp": "0.0.0.0/0"
+          },
+           {
+             "IpProtocol" : "icmp",
+             "ToPort" : "-1",
+             "FromPort" : "-1",
+             "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol" : "tcp",
+            "ToPort" : "65535",
+            "FromPort" : "0",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": "ParseSG"
+          }
+        ]
+      }
+    },
+    "MongoDBSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "GroupDescription": "Enable SSH access via port 22",
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AppStackName"
+                  },
+                  "-MongoDBSG"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+
+    "ELBSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "GroupDescription": "Enable SSH access via port 22 and to the rest of the vpc",
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": "ELBSG"
+          }
+        ]
+      }
+    },
+    "ELBSGIngress1" : {
+      "Type" : "AWS::EC2::SecurityGroupIngress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "ELBSG" },
+        "IpProtocol" : "tcp",
+        "ToPort" : "443",
+        "FromPort" : "443",
+        "CidrIp" : "0.0.0.0/0"
+      }
+    },
+    "ELBSGEgress1": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "GroupId" : { "Ref" : "ELBSG" },
+        "IpProtocol" : "tcp",
+        "FromPort" : "0",
+        "ToPort" : "65535",
+        "CidrIp" : "0.0.0.0/0"
+      }
+    },
+
+    "MongoDBSGSecurityGroupEgress3" : {
+      "Type" : "AWS::EC2::SecurityGroupEgress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "MongoDBSG" },
+        "IpProtocol" : "udp",
+        "ToPort" : "123",
+        "FromPort" : "123",
+        "CidrIp": "0.0.0.0/0"
+      }
+    },
+    "MongoDBSGSecurityGroupEgress4" : {
+      "Type" : "AWS::EC2::SecurityGroupEgress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "MongoDBSG" },
+        "IpProtocol" : "icmp",
+        "ToPort" : "-1",
+        "FromPort" : "-1",
+        "CidrIp": "0.0.0.0/0"
+      }
+    },
+    "MongoDBSGSecurityGroupEgress5" : {
+      "Type" : "AWS::EC2::SecurityGroupEgress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "MongoDBSG" },
+        "IpProtocol" : "tcp",
+        "ToPort" : "27017",
+        "FromPort" : "27017",
+        "DestinationSecurityGroupId" : {"Fn::GetAtt": ["MongoDBSG","GroupId"]}
+      }
+    },
+
+
+    "MongoDBSGSecurityGroupIngress1" : {
+      "Type" : "AWS::EC2::SecurityGroupIngress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "MongoDBSG" },
+        "IpProtocol" : "tcp",
+        "ToPort" : "22",
+        "FromPort" : "22",
+        "CidrIp" : {"Ref" : "YourIP"}
+      }
+    },
+
+    "MongoDBSGSecurityGroupIngress3" : {
+      "Type" : "AWS::EC2::SecurityGroupIngress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "MongoDBSG" },
+        "IpProtocol" : "tcp",
+        "ToPort" : "27017",
+        "FromPort" : "27017",
+        "SourceSecurityGroupId" : {"Fn::GetAtt": ["ParseSG","GroupId"]}
+      }
+    },
+    "MongoDBSGSecurityGroupIngress4" : {
+      "Type" : "AWS::EC2::SecurityGroupIngress",
+      "Properties" : {
+        "GroupId" : { "Ref" : "MongoDBSG" },
+        "IpProtocol" : "tcp",
+        "ToPort" : "27017",
+        "FromPort" : "27017",
+        "SourceSecurityGroupId" : {"Fn::GetAtt": ["MongoDBSG","GroupId"]}
+      }
+    },
+
+
+
+
+    "DNS": {
+      "Type": "AWS::Route53::HostedZone",
+      "Properties": {
+        "HostedZoneConfig": {
+          "Comment": "My hosted zone for vivio.local"
+        },
+        "Name": { "Ref" : "HostedZone" },
+        "VPCs": [
+          {
+            "VPCId": { "Ref" : "MyVPC" },
+            "VPCRegion": { "Ref" : "AWS::Region" }
+          }
+        ],
+        "HostedZoneTags" : [
+          {
+            "Key": "Hosted Zone Name",
+            "Value": "demo.local"
+          },
+          {
+            "Key": "Name",
+            "Value": "demo.local"
+          }]
+      }
+    }
+
+  },
+  "Outputs" : {
+    "VpcId" : {
+      "Value" : {"Ref" : "MyVPC"},
+      "Description" : "VPC ID of newly created VPC"
+    },
+
+    "parsePublicSubnet01" : {
+      "Value" : {"Ref" : "parsePublicSubnet01"},
+      "Description" : "subnet 01 ID"
+    },
+    "parsePublicSubnet02" : {
+      "Value" : {"Ref" : "parsePublicSubnet02"},
+      "Description" : "subnet 02 ID"
+    },
+    "parsePublicSubnet03" : {
+      "Value" : {"Ref" : "parsePublicSubnet03"},
+      "Description" : "subnet 03 ID"
+    },
+    "publicSubnet01" : {
+      "Value" : {"Ref" : "publicSubnet01"},
+      "Description" : "subnet 01 ID"
+    },
+    "publicSubnet02" : {
+      "Value" : {"Ref" : "publicSubnet02"},
+      "Description" : "subnet 02 ID"
+    },
+    "publicSubnet03" : {
+      "Value" : {"Ref" : "publicSubnet03"},
+      "Description" : "subnet 03 ID"
+    },
+    "MongoDBSG" : {
+      "Value" : {"Ref" : "MongoDBSG"},
+      "Description" : "Security group ID for mongodb"
+    },
+    "ELBSG" : {
+      "Value" : {"Ref" : "ELBSG"},
+      "Description" : "Security group ID for ELB"
+    },
+    "ParseSG" : {
+      "Value" : {"Ref" : "ParseSG"},
+      "Description" : "app group ID for ParseSG"
+    },
+    "ParseClientSG" : {
+      "Value" : {"Ref" : "ParseClientSG"},
+      "Description" : "app group ID for ParseClientSG"
+    },
+
+    "HostedZone" : {
+      "Value" : { "Ref" : "DNS"},
+      "Description" :"hosted zone inside vpc"
+    }
+  }
+}
