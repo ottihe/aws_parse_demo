@@ -1,6 +1,17 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Description": "Stack Dependency",
+  "Parameters" : {
+    "LambdaS3Bucket": {
+      "Description": "The name of the S3 bucket that contains the source code of your Lambda function.",
+      "Type": "String"
+    },
+    "LambdaS3Key": {
+      "Description": "The location and name of your source code .zip file.",
+      "Type": "String",
+      "Default": "lambda.zip"
+    }
+  },
   "Resources": {
     "LambdaRole": {
       "Type": "AWS::IAM::Role",
@@ -28,7 +39,21 @@
               "Resource": "arn:aws:logs:*:*:*"
             }]
           }
-        }]
+        },
+          {
+            "PolicyName": "cloudformation",
+            "PolicyDocument": {
+              "Version" : "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:*"
+                  ],
+                  "Resource": "*"
+                }]
+            }
+          }]
       }
     },
     "Lambda": {
@@ -44,15 +69,6 @@
         "Role": {"Fn::GetAtt": ["LambdaRole", "Arn"]},
         "Runtime": "nodejs",
         "Timeout": 30
-      }
-    },
-    "LambdaPermission": {
-      "Type": "AWS::Lambda::Permission",
-      "Properties": {
-        "Action": "lambda:invokeFunction",
-        "FunctionName": {"Fn::GetAtt": ["Lambda", "Arn"]},
-        "Principal": "s3.amazonaws.com",
-        "SourceArn": {"Fn::Join": ["", ["arn:aws:s3:::", {"Ref": "ImageS3Bucket"}, "-original"]]}
       }
     }
   }
