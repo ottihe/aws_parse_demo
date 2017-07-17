@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "HostedZone",
+    "ParameterValue": "demo.local"
+  },
+  {
+    "ParameterKey": "YourIP",
+    "ParameterValue": "*.*.*.*/32"
+  },
+  {
+    "ParameterKey": "AppStackName",
+    "ParameterValue": "VPC Parse AWS Demo Stack"
+  }
+]

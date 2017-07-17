@@ -11,7 +11,7 @@
       "MaxLength": "64",
       "AllowedPattern" : "[a-zA-Z0-9][-_ a-zA-Z0-9]*",
       "ConstraintDescription": "Must be between 2 and 20 characters long and may contain alphanumeric characters, hyphens (-), and underscores (_), but must start with alphanumeric.",
-      "Default": "Parse Server Test Stack"
+      "Default": "VPC for Parse Server Demo Stack"
     },
 
     "YourIP": {
@@ -61,10 +61,10 @@
       "private" : {"RANGE" : "128.0/17"}
     },
 
-    "publicSubnetConfig" : {
-      "publicSubnet01" : { "CIDR" : "10.0/24" },
-      "publicSubnet02" : { "CIDR" : "11.0/24" },
-      "publicSubnet03" : { "CIDR" : "12.0/24" }
+    "mongoPublicSubnetConfig" : {
+      "mongoPublicSubnet01" : { "CIDR" : "10.0/24" },
+      "mongoPublicSubnet02" : { "CIDR" : "11.0/24" },
+      "mongoPublicSubnet03" : { "CIDR" : "12.0/24" }
 
     },
     "parsePublicSubnetConfig" : {
@@ -300,7 +300,7 @@
         ]
       }
     },
-    "publicSubnet01": {
+    "mongoPublicSubnet01": {
       "Type": "AWS::EC2::Subnet",
       "Properties": {
         "MapPublicIpOnLaunch": "true",
@@ -323,8 +323,8 @@
               ".",
               {
                 "Fn::FindInMap": [
-                  "publicSubnetConfig",
-                  "publicSubnet01",
+                  "mongoPublicSubnetConfig",
+                  "mongoPublicSubnet01",
                   "CIDR"
                 ]
               }
@@ -354,12 +354,12 @@
           },
           {
             "Key": "Name",
-            "Value": "publicSubnet01"
+            "Value": "mongoPublicSubnet01"
           }
         ]
       }
     },
-    "publicSubnet02": {
+    "mongoPublicSubnet02": {
       "Type": "AWS::EC2::Subnet",
       "Properties": {
         "VpcId": {
@@ -381,8 +381,8 @@
               ".",
               {
                 "Fn::FindInMap": [
-                  "publicSubnetConfig",
-                  "publicSubnet02",
+                  "mongoPublicSubnetConfig",
+                  "mongoPublicSubnet02",
                   "CIDR"
                 ]
               }
@@ -412,12 +412,12 @@
           },
           {
             "Key": "Name",
-            "Value": "publicSubnet02"
+            "Value": "mongoPublicSubnet02"
           }
         ]
       }
     },
-    "publicSubnet03": {
+    "mongoPublicSubnet03": {
       "Type": "AWS::EC2::Subnet",
       "Properties": {
         "VpcId": {
@@ -439,8 +439,8 @@
               ".",
               {
                 "Fn::FindInMap": [
-                  "publicSubnetConfig",
-                  "publicSubnet03",
+                  "mongoPublicSubnetConfig",
+                  "mongoPublicSubnet03",
                   "CIDR"
                 ]
               }
@@ -470,7 +470,7 @@
           },
           {
             "Key": "Name",
-            "Value": "publicSubnet03"
+            "Value": "mongoPublicSubnet03"
           }
         ]
       }
@@ -589,33 +589,33 @@
         }
       }
     },
-    "PublicSubnetRTAssociation01": {
+    "MongoPublicSubnetRTAssociation01": {
       "Type": "AWS::EC2::SubnetRouteTableAssociation",
       "Properties": {
         "SubnetId": {
-          "Ref": "publicSubnet01"
+          "Ref": "mongoPublicSubnet01"
         },
         "RouteTableId": {
           "Ref": "PublicRouteTable"
         }
       }
     },
-    "PublicSubnetRTAssociation02": {
+    "MongoPublicSubnetRTAssociation02": {
       "Type": "AWS::EC2::SubnetRouteTableAssociation",
       "Properties": {
         "SubnetId": {
-          "Ref": "publicSubnet02"
+          "Ref": "mongoPublicSubnet02"
         },
         "RouteTableId": {
           "Ref": "PublicRouteTable"
         }
       }
     },
-    "PublicSubnetRTAssociation03": {
+    "MongoPublicSubnetRTAssociation03": {
       "Type": "AWS::EC2::SubnetRouteTableAssociation",
       "Properties": {
         "SubnetId": {
-          "Ref": "publicSubnet03"
+          "Ref": "mongoPublicSubnet03"
         },
         "RouteTableId": {
           "Ref": "PublicRouteTable"
@@ -720,33 +720,33 @@
         }
       }
     },
-    "publicSubnetNetworkAclAssociation01": {
+    "mongoPublicSubnetNetworkAclAssociation01": {
       "Type": "AWS::EC2::SubnetNetworkAclAssociation",
       "Properties": {
         "SubnetId": {
-          "Ref": "publicSubnet01"
+          "Ref": "mongoPublicSubnet01"
         },
         "NetworkAclId": {
           "Ref": "PublicNetworkAcl"
         }
       }
     },
-    "publicSubnetNetworkAclAssociation02": {
+    "mongoPublicSubnetNetworkAclAssociation02": {
       "Type": "AWS::EC2::SubnetNetworkAclAssociation",
       "Properties": {
         "SubnetId": {
-          "Ref": "publicSubnet02"
+          "Ref": "mongoPublicSubnet02"
         },
         "NetworkAclId": {
           "Ref": "PublicNetworkAcl"
         }
       }
     },
-    "publicSubnetNetworkAclAssociation03": {
+    "mongoPublicSubnetNetworkAclAssociation03": {
       "Type": "AWS::EC2::SubnetNetworkAclAssociation",
       "Properties": {
         "SubnetId": {
-          "Ref": "publicSubnet03"
+          "Ref": "mongoPublicSubnet03"
         },
         "NetworkAclId": {
           "Ref": "PublicNetworkAcl"
@@ -808,12 +808,7 @@
 
         "SecurityGroupEgress" : [
 
-          {
-            "IpProtocol" : "tcp",
-            "ToPort" : "27017",
-            "FromPort" : "27017",
-            "DestinationSecurityGroupId" : {"Fn::GetAtt": ["MongoDBSG","GroupId"]}
-          },
+
           {
             "IpProtocol" : "udp",
             "ToPort" : "123",
@@ -853,7 +848,7 @@
         "VpcId": {
           "Ref": "MyVPC"
         },
-        "GroupDescription": "Enable SSH access via port 22",
+        "GroupDescription": "Mongo SG",
         "Tags": [
           {
             "Key": "AppStackName",
@@ -878,7 +873,37 @@
         ]
       }
     },
-
+    "MongoClientDBSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "MyVPC"
+        },
+        "GroupDescription": "SG for mongo clients",
+        "Tags": [
+          {
+            "Key": "AppStackName",
+            "Value": {
+              "Ref": "AppStackName"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "AppStackName"
+                  },
+                  "-MongoClientDBSG"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
     "ELBSG": {
       "Type": "AWS::EC2::SecurityGroup",
       "Properties": {
@@ -921,7 +946,7 @@
       }
     },
 
-    "MongoDBSGSecurityGroupEgress3" : {
+    "MongoDBSGSecurityGroupEgress1" : {
       "Type" : "AWS::EC2::SecurityGroupEgress",
       "Properties" : {
         "GroupId" : { "Ref" : "MongoDBSG" },
@@ -931,7 +956,7 @@
         "CidrIp": "0.0.0.0/0"
       }
     },
-    "MongoDBSGSecurityGroupEgress4" : {
+    "MongoDBSGSecurityGroupEgress2" : {
       "Type" : "AWS::EC2::SecurityGroupEgress",
       "Properties" : {
         "GroupId" : { "Ref" : "MongoDBSG" },
@@ -941,7 +966,7 @@
         "CidrIp": "0.0.0.0/0"
       }
     },
-    "MongoDBSGSecurityGroupEgress5" : {
+    "MongoDBSGSecurityGroupEgress3" : {
       "Type" : "AWS::EC2::SecurityGroupEgress",
       "Properties" : {
         "GroupId" : { "Ref" : "MongoDBSG" },
@@ -964,17 +989,17 @@
       }
     },
 
-    "MongoDBSGSecurityGroupIngress3" : {
+    "MongoDBSGSecurityGroupIngress2" : {
       "Type" : "AWS::EC2::SecurityGroupIngress",
       "Properties" : {
         "GroupId" : { "Ref" : "MongoDBSG" },
         "IpProtocol" : "tcp",
         "ToPort" : "27017",
         "FromPort" : "27017",
-        "SourceSecurityGroupId" : {"Fn::GetAtt": ["ParseSG","GroupId"]}
+        "SourceSecurityGroupId" : {"Fn::GetAtt": ["MongoClientDBSG","GroupId"]}
       }
     },
-    "MongoDBSGSecurityGroupIngress4" : {
+    "MongoDBSGSecurityGroupIngress3" : {
       "Type" : "AWS::EC2::SecurityGroupIngress",
       "Properties" : {
         "GroupId" : { "Ref" : "MongoDBSG" },
@@ -1004,11 +1029,11 @@
         "HostedZoneTags" : [
           {
             "Key": "Hosted Zone Name",
-            "Value": "demo.local"
+            "Value": { "Ref" : "HostedZone" }
           },
           {
             "Key": "Name",
-            "Value": "demo.local"
+            "Value": { "Ref" : "HostedZone" }
           }]
       }
     }
@@ -1032,20 +1057,24 @@
       "Value" : {"Ref" : "parsePublicSubnet03"},
       "Description" : "subnet 03 ID"
     },
-    "publicSubnet01" : {
-      "Value" : {"Ref" : "publicSubnet01"},
+    "mongoPublicSubnet01" : {
+      "Value" : {"Ref" : "mongoPublicSubnet01"},
       "Description" : "subnet 01 ID"
     },
-    "publicSubnet02" : {
-      "Value" : {"Ref" : "publicSubnet02"},
+    "mongoPublicSubnet02" : {
+      "Value" : {"Ref" : "mongoPublicSubnet02"},
       "Description" : "subnet 02 ID"
     },
-    "publicSubnet03" : {
-      "Value" : {"Ref" : "publicSubnet03"},
+    "mongoPublicSubnet03" : {
+      "Value" : {"Ref" : "mongoPublicSubnet03"},
       "Description" : "subnet 03 ID"
     },
     "MongoDBSG" : {
       "Value" : {"Ref" : "MongoDBSG"},
+      "Description" : "Security group ID for mongodb"
+    },
+    "MongoClientDBSG" : {
+      "Value" : {"Ref" : "MongoClientDBSG"},
       "Description" : "Security group ID for mongodb"
     },
     "ELBSG" : {
