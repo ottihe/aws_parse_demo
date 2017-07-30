@@ -1,0 +1,968 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Creates Mongodb stack",
+
+  "Parameters" : {
+
+    "Setup" : {
+      "Description" : "Environment type.",
+      "Type" : "String",
+      "AllowedValues" : ["replica", "single"],
+      "ConstraintDescription" : "must specify replica or single."
+    },
+
+    "EnvType" : {
+      "Description" : "Environment type.",
+      "Type" : "String",
+      "AllowedValues" : ["prod", "test"],
+      "ConstraintDescription" : "must specify prod or test."
+    },
+
+    "KeyName"  : {
+     "Description" : "Mongodb security group",
+      "Type" : "String"
+    },
+
+    "AppName"  : {
+      "Description" : "Mongodb security group",
+      "Type" : "String"
+    },
+
+    "mongoUserAdmin" : {
+      "Description": "For admin user in test mongodb",
+      "Type": "String"
+    },
+
+    "mongoUserAdminPW" : {
+      "Description": "For admin pw user in test mongodb",
+      "Type": "String",
+      "NoEcho" : true
+    },
+
+    "mongoUser" : {
+      "Description": "For admin user in test mongodb",
+      "Type": "String"
+    },
+
+    "mongoUserPW" : {
+      "Description": "For admin pw user in test mongodb",
+      "Type": "String",
+      "NoEcho" : true
+    },
+
+    "VPCStackName" : {
+      "Description": "",
+      "Type": "String"
+    },
+
+    "BucketArtefacts" : {
+      "Description": "",
+      "Type": "String"
+    },
+
+    "ReplicaKeyfile" : {
+      "Description": "",
+      "Type": "String"
+    }
+
+  },
+
+  "Mappings" : {
+
+    "AWSRegionAMI": {
+      "us-east-1": {"HVM": "ami-60b6c60a"},
+      "us-west-2": {"HVM": "ami-f0091d91"},
+      "us-west-1": {"HVM": "ami-d5ea86b5"},
+      "eu-west-1": {"HVM": "ami-bff32ccc"},
+      "eu-central-1": {"HVM": "ami-bc5b48d0"},
+      "ap-southeast-1" : {"HVM": "ami-c9b572aa"},
+      "ap-northeast-1" : {"HVM": "ami-383c1956"},
+      "ap-southeast-2" : {"HVM": "ami-48d38c2b"},
+      "ap-northeast-2" : {"HVM": "ami-249b554a"},
+      "sa-east-1" : {"HVM": "ami-6817af04"}
+    }
+  },
+
+  "Conditions" : {
+    "CreateTestResources" : {"Fn::Equals" : [{"Ref" : "EnvType"}, "test"]},
+    "CreateProdResources" : {"Fn::Equals" : [{"Ref" : "EnvType"}, "prod"]},
+    "CreateReplica" : {"Fn::Equals" : [{"Ref" : "Setup"}, "replica"]}
+  },
+
+  "Resources" : {
+
+    "NetworkStackDependency": {
+      "Type": "Custom::StackDependency",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::Join": ["", [
+            "arn:aws:lambda:", {
+              "Ref": "AWS::Region"
+            },
+            ":", {
+              "Ref": "AWS::AccountId"
+            },
+            ":function:stackDependency"
+          ]]
+        },
+        "StackName" : {"Ref":"VPCStackName"}
+      }
+    },
+
+    "InstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Sid": "",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Path": "/"
+      }
+    },
+
+    "InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [{"Ref": "InstanceRole"}]
+      }
+    },
+
+    "InstancePolicies": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyName": "ParseInstancePolicy",
+        "PolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement": [
+
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:Get*", "s3:List*" , "s3:Put*"],
+              "Resource":  {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:aws:s3:::", {"Ref": "BucketArtefacts"}, "/*"
+                  ]
+                ]
+              }
+            } ,
+            {
+              "Effect": "Allow",
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogStreams"
+              ],
+              "Resource": [
+                "arn:aws:logs:*:*:*"
+              ]
+            }
+          ]
+        },
+        "Roles": [ { "Ref": "InstanceRole" } ]
+      }
+    },
+
+    "NodeA" : {
+      "Type" : "AWS::EC2::Instance",
+      "CreationPolicy" : {
+        "ResourceSignal" : {
+          "Timeout" : "PT15M",
+          "Count"   : "1"
+        }
+      },
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "config" : {
+            "files" : {
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[cfn-auto-reloader-hook]\n",
+                  "triggers=post.update\n",
+                  "path=Resources.NodeA.Metadata.AWS::CloudFormation::Init\n",
+                  "action=/opt/aws/bin/cfn-init -v ",
+                  "         --stack ",
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "         --resource NodeA ",
+                  "         --region ",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "\n",
+                  "runas=root\n"
+                ]
+                ]
+                },
+                "mode": "000700",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/cfn/cfn-hup.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[main]\n",
+                  "stack=",
+                  {
+                    "Ref": "AWS::StackId"
+                  },
+                  "\n",
+                  "region=",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "\n"
+                ]
+                ]
+                },
+                "mode": "000400",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/yum.repos.d/mongodb-org-3.0.repo" : {
+                "content" : { "Fn::Join" : ["", [
+                  "[mongodb-org-3.0]\n",
+                  "name=MongoDB Repository\n",
+                  "baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/3.0/x86_64/\n",
+                  "gpgcheck=0\n",
+                  "enabled=1\n"
+                ]]},
+                "mode" : "000644",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/home/ec2-user/awslogs.cfg" : {
+                "content": { "Fn::Join" : ["", [
+                  "[general]\n",
+                  "state_file = /var/awslogs/state/agent-state\n",
+                  "\n",
+                  "[/var/log/cloud-init-output.log]\n",
+                  "file = /var/log/cloud-init-output.log\n",
+                  "log_group_name = security-service-cloud-init-output.log\n",
+                  "log_stream_name = {instance_id}\n",
+                  "datetime_format = %b %d %H:%M:%S\n",
+                  "\n",
+                  "[/var/log/mongodb/mongod.log]\n",
+                  "file = /var/log/mongodb/mongod.log\n",
+                  "log_group_name = mongod.log\n",
+                  "log_stream_name = {instance_id}\n",
+                  "datetime_format = %b %d %H:%M:%S\n",
+                  "\n"
+                ]]},
+                "mode"    : "000744",
+                "owner"   : "root",
+                "group"   : "root"
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            },
+            "commands" : {
+              "aa_awslogs": {
+                "command": "/home/ec2-user/awslogs-agent-setup.py -n -r us-east-1 -c /home/ec2-user/awslogs.cfg"
+              }
+            }
+
+          }
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionAMI", { "Ref" : "AWS::Region" }, "HVM" ]},
+        "IamInstanceProfile": { "Ref" : "InstanceProfile" },
+        "InstanceType" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "t2.medium",
+            "t2.micro"
+          ]},
+        "KeyName" : { "Ref" : "KeyName" },
+        "EbsOptimized" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "true",
+            "false"
+          ]},
+        "NetworkInterfaces" : [{
+          "SubnetId" :  {
+            "Fn::GetAtt": [ "NetworkStackDependency", "mongoPublicSubnet01" ]
+          },
+          "GroupSet" : [{
+            "Fn::GetAtt": [ "NetworkStackDependency", "MongoDBSG" ]
+          }],
+          "AssociatePublicIpAddress" : "true",
+          "DeviceIndex" : "0"
+        }],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [ "", [ "#!/bin/bash -ex\n",
+              "yum install -y aws-cli\n",
+              "function error_exit\n",
+              "{\n",
+              "  /opt/aws/bin/cfn-signal -e 1 ",
+              "  --stack ", { "Ref": "AWS::StackName" },
+              "  --resource NodeA " ,
+              "  --region ", { "Ref" : "AWS::Region" }, "\n",
+              "  exit 1\n",
+              "}\n",
+              "sleep 30\n",
+
+              "while [ ! -e /dev/xvdf ]; do echo 'waiting for /dev/xvdf to attach'; sleep 10; done\n",
+              "mkfs -t ext4 /dev/xvdf\n",
+              "mkdir -p /opt/mongodata\n",
+              "mount /dev/xvdf /opt/mongodata\n",
+              "echo \"/dev/xvdf /mnt/influx ext4 defaults,nofail 0 2\" >> /etc/fstab\n",
+
+
+              "cp /etc/fstab /etc/fstab.orig\n",
+              "echo \"/dev/${DEVICEMAP}       /opt/mongodata   ext4    defaults,nofail        0       2\" >>  /etc/fstab\n",
+              "echo \"After mount\"\n",
+              "mkdir -p /opt/mongodata/keyfile\n",
+
+              "cd /home/ec2-user/\n",
+              "curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O\n",
+              "chmod +x ./awslogs-agent-setup.py\n",
+
+              "/opt/aws/bin/cfn-init -v -s ", { "Ref": "AWS::StackName" },
+              " -r MongoNode --region ", {  "Ref": "AWS::Region" },"\n",
+
+              "yum install -y mongodb-org\n",
+              "chown mongod:mongod /opt/mongodata/\n",
+              "/bin/sed -i \"s/\\/var\\/lib\\/mongo/\\/opt\\/mongodata/g\" /etc/mongod.conf\n",
+              "/bin/sed -i \"s/bindIp/#bindIp/g\" /etc/mongod.conf\n",
+              "/sbin/service mongod start\n",
+              "sleep 30\n",
+
+              "if [[ \"", {"Ref":"Setup"} ,"\" == \"replica\" ]]; then\n",
+              "  /bin/sed -i \"s/#security:/security:\\n   keyFile: \\/opt\\/mongodata\\/keyfile\\/replica_keyfile/g\" /etc/mongod.conf\n",
+              "  /bin/sed -i \"s/#replication:/replication:\\n   replSetName: viviovideoset0/g\" /etc/mongod.conf\n",
+              "  aws s3 cp s3://",{"Ref":"BucketArtefacts"},"/replicaset/",{"Ref":"ReplicaKeyfile"}," /opt/mongodata/keyfile/replica_keyfile\n",
+              "  chown mongod:mongod /opt/mongodata/keyfile/replica_keyfile\n",
+              "  chmod 600 /opt/mongodata/keyfile/replica_keyfile\n",
+              "  service mongod restart\n",
+              "fi\n",
+              "service mongod status\n",
+
+              "# If all went well, signal success\n",
+              "/opt/aws/bin/cfn-signal -e 0 ",
+              "  --stack ", { "Ref": "AWS::StackName" },
+              "  --resource NodeA " ,
+              "  --region ", { "Ref" : "AWS::Region" }, "\n"
+            ]
+            ]
+          }
+        },
+        "Tags" : [
+          {"Key" : "AppName", "Value" : {"Ref":"AppName"}},
+          {"Key" : "Name", "Value" : "NodeA"}
+        ]
+      }
+    },
+
+    "MongoDBDataVol01" : {
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "40",
+            "10"
+          ]},
+        "VolumeType" : "gp2",
+        "AvailabilityZone" : { "Fn::GetAtt" : [ "NodeA", "AvailabilityZone" ] },
+        "Tags" : [
+          {"Key" : "AppName", "Value" : {"Ref":"AppName"}},
+          {"Key" : "Name", "Value" : "NodeA"}
+        ]
+      },
+      "DeletionPolicy" : "Snapshot"
+    },
+
+    "MongoMountPoint01" : {
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "NodeA" },
+        "VolumeId"  : { "Ref" : "MongoDBDataVol01" },
+        "Device" : "/dev/sdf"
+      }
+    },
+
+    "NodeB" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::EC2::Instance",
+      "CreationPolicy" : {
+        "ResourceSignal" : {
+          "Timeout" : "PT15M",
+          "Count"   : "1"
+        }
+      },
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "config" : {
+            "files" : {
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[cfn-auto-reloader-hook]\n",
+                  "triggers=post.update\n",
+                  "path=Resources.NodeB.Metadata.AWS::CloudFormation::Init\n",
+                  "action=/opt/aws/bin/cfn-init -v ",
+                  "         --stack ",
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "         --resource NodeB ",
+                  "         --region ",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "\n",
+                  "runas=root\n"
+                ]
+                ]
+                },
+                "mode": "000700",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/cfn/cfn-hup.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[main]\n",
+                  "stack=",
+                  {
+                    "Ref": "AWS::StackId"
+                  },
+                  "\n",
+                  "region=",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "\n"
+                ]
+                ]
+                },
+                "mode": "000400",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/yum.repos.d/mongodb-org-3.0.repo" : {
+                "content" : { "Fn::Join" : ["", [
+                  "[mongodb-org-3.0]\n",
+                  "name=MongoDB Repository\n",
+                  "baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/3.0/x86_64/\n",
+                  "gpgcheck=0\n",
+                  "enabled=1\n"
+                ]]},
+                "mode" : "000644",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/home/ec2-user/awslogs.cfg" : {
+                "content": { "Fn::Join" : ["", [
+                  "[general]\n",
+                  "state_file = /var/awslogs/state/agent-state\n",
+                  "\n",
+                  "[/var/log/cloud-init-output.log]\n",
+                  "file = /var/log/cloud-init-output.log\n",
+                  "log_group_name = security-service-cloud-init-output.log\n",
+                  "log_stream_name = {instance_id}\n",
+                  "datetime_format = %b %d %H:%M:%S\n",
+                  "\n",
+                  "[/var/log/mongodb/mongod.log]\n",
+                  "file = /var/log/mongodb/mongod.log\n",
+                  "log_group_name = mongod.log\n",
+                  "log_stream_name = {instance_id}\n",
+                  "datetime_format = %b %d %H:%M:%S\n",
+                  "\n"
+                ]]},
+                "mode"    : "000744",
+                "owner"   : "root",
+                "group"   : "root"
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            },
+            "commands" : {
+              "aa_awslogs": {
+                "command": "/home/ec2-user/awslogs-agent-setup.py -n -r us-east-1 -c /home/ec2-user/awslogs.cfg"
+              }
+            }
+
+          }
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionAMI", { "Ref" : "AWS::Region" }, "HVM" ]},
+        "IamInstanceProfile": { "Ref" : "InstanceProfile" },
+        "InstanceType" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "t2.medium",
+            "t2.micro"
+          ]},
+        "KeyName" : { "Ref" : "KeyName" },
+        "EbsOptimized" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "true",
+            "false"
+          ]},
+        "NetworkInterfaces" : [{
+          "SubnetId" :  {
+            "Fn::GetAtt": [ "NetworkStackDependency", "mongoPublicSubnet02" ]
+          },
+          "GroupSet" : [{
+            "Fn::GetAtt": [ "NetworkStackDependency", "MongoDBSG" ]
+          }],
+          "AssociatePublicIpAddress" : "true",
+          "DeviceIndex" : "0"
+        }],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [ "", [ "#!/bin/bash -ex\n",
+              "yum install -y aws-cli\n",
+              "function error_exit\n",
+              "{\n",
+              "  /opt/aws/bin/cfn-signal -e 1 ",
+              "  --stack ", { "Ref": "AWS::StackName" },
+              "  --resource NodeB " ,
+              "  --region ", { "Ref" : "AWS::Region" }, "\n",
+              "  exit 1\n",
+              "}\n",
+              "sleep 30\n",
+
+              "while [ ! -e /dev/xvdf ]; do echo 'waiting for /dev/xvdf to attach'; sleep 10; done\n",
+              "mkfs -t ext4 /dev/xvdf\n",
+              "mkdir -p /opt/mongodata\n",
+              "mount /dev/xvdf /opt/mongodata\n",
+              "echo \"/dev/xvdf /mnt/influx ext4 defaults,nofail 0 2\" >> /etc/fstab\n",
+
+
+              "cp /etc/fstab /etc/fstab.orig\n",
+              "echo \"/dev/${DEVICEMAP}       /opt/mongodata   ext4    defaults,nofail        0       2\" >>  /etc/fstab\n",
+              "echo \"After mount\"\n",
+              "mkdir -p /opt/mongodata/keyfile\n",
+
+              "cd /home/ec2-user/\n",
+              "curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O\n",
+              "chmod +x ./awslogs-agent-setup.py\n",
+
+              "/opt/aws/bin/cfn-init -v -s ", { "Ref": "AWS::StackName" },
+              " -r MongoNode --region ", {  "Ref": "AWS::Region" },"\n",
+
+              "yum install -y mongodb-org\n",
+              "chown mongod:mongod /opt/mongodata/\n",
+              "/bin/sed -i \"s/\\/var\\/lib\\/mongo/\\/opt\\/mongodata/g\" /etc/mongod.conf\n",
+              "/bin/sed -i \"s/bindIp/#bindIp/g\" /etc/mongod.conf\n",
+              "/sbin/service mongod start\n",
+              "sleep 30\n",
+
+              "if [[ \"", {"Ref":"Setup"} ,"\" == \"replica\" ]]; then\n",
+              "  /bin/sed -i \"s/#security:/security:\\n   keyFile: \\/opt\\/mongodata\\/keyfile\\/replica_keyfile/g\" /etc/mongod.conf\n",
+              "  /bin/sed -i \"s/#replication:/replication:\\n   replSetName: viviovideoset0/g\" /etc/mongod.conf\n",
+              "  aws s3 cp s3://",{"Ref":"BucketArtefacts"},"/replicaset/",{"Ref":"ReplicaKeyfile"}," /opt/mongodata/keyfile/replica_keyfile\n",
+              "  chown mongod:mongod /opt/mongodata/keyfile/replica_keyfile\n",
+              "  chmod 600 /opt/mongodata/keyfile/replica_keyfile\n",
+              "  service mongod restart\n",
+              "fi\n",
+              "service mongod status\n",
+
+              "# If all went well, signal success\n",
+              "/opt/aws/bin/cfn-signal -e 0 ",
+              "  --stack ", { "Ref": "AWS::StackName" },
+              "  --resource NodeB " ,
+              "  --region ", { "Ref" : "AWS::Region" }, "\n"
+            ]
+            ]
+          }
+        },
+        "Tags" : [
+          {"Key" : "AppName", "Value" : {"Ref":"AppName"}},
+          {"Key" : "Name", "Value" : "NodeB"}
+        ]
+      }
+    },
+
+    "MongoDBDataVol02" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "40",
+            "10"
+          ]},
+        "VolumeType" : "gp2",
+        "AvailabilityZone" : { "Fn::GetAtt" : [ "NodeA", "AvailabilityZone" ] },
+        "Tags" : [
+          {"Key" : "AppName", "Value" : {"Ref":"AppName"}},
+          {"Key" : "Name", "Value" : "NodeB"}
+        ]
+      },
+      "DeletionPolicy" : "Snapshot"
+    },
+
+    "MongoMountPoint02" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "NodeB" },
+        "VolumeId"  : { "Ref" : "MongoDBDataVol02" },
+        "Device" : "/dev/sdf"
+      }
+    },
+
+    "NodeC" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::EC2::Instance",
+      "CreationPolicy" : {
+        "ResourceSignal" : {
+          "Timeout" : "PT15M",
+          "Count"   : "1"
+        }
+      },
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "config" : {
+            "files" : {
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[cfn-auto-reloader-hook]\n",
+                  "triggers=post.update\n",
+                  "path=Resources.NodeC.Metadata.AWS::CloudFormation::Init\n",
+                  "action=/opt/aws/bin/cfn-init -v ",
+                  "         --stack ",
+                  {
+                    "Ref": "AWS::StackName"
+                  },
+                  "         --resource NodeC ",
+                  "         --region ",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "\n",
+                  "runas=root\n"
+                ]
+                ]
+                },
+                "mode": "000700",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/cfn/cfn-hup.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[main]\n",
+                  "stack=",
+                  {
+                    "Ref": "AWS::StackId"
+                  },
+                  "\n",
+                  "region=",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "\n"
+                ]
+                ]
+                },
+                "mode": "000400",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/yum.repos.d/mongodb-org-3.0.repo" : {
+                "content" : { "Fn::Join" : ["", [
+                  "[mongodb-org-3.0]\n",
+                  "name=MongoDB Repository\n",
+                  "baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/3.0/x86_64/\n",
+                  "gpgcheck=0\n",
+                  "enabled=1\n"
+                ]]},
+                "mode" : "000644",
+                "owner" : "root",
+                "group" : "root"
+              },
+              "/home/ec2-user/awslogs.cfg" : {
+                "content": { "Fn::Join" : ["", [
+                  "[general]\n",
+                  "state_file = /var/awslogs/state/agent-state\n",
+                  "\n",
+                  "[/var/log/cloud-init-output.log]\n",
+                  "file = /var/log/cloud-init-output.log\n",
+                  "log_group_name = security-service-cloud-init-output.log\n",
+                  "log_stream_name = {instance_id}\n",
+                  "datetime_format = %b %d %H:%M:%S\n",
+                  "\n",
+                  "[/var/log/mongodb/mongod.log]\n",
+                  "file = /var/log/mongodb/mongod.log\n",
+                  "log_group_name = mongod.log\n",
+                  "log_stream_name = {instance_id}\n",
+                  "datetime_format = %b %d %H:%M:%S\n",
+                  "\n"
+                ]]},
+                "mode"    : "000744",
+                "owner"   : "root",
+                "group"   : "root"
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            },
+            "commands" : {
+              "aa_awslogs": {
+                "command": "/home/ec2-user/awslogs-agent-setup.py -n -r us-east-1 -c /home/ec2-user/awslogs.cfg"
+              }
+            }
+
+          }
+        }
+      },
+      "Properties": {
+        "ImageId" : { "Fn::FindInMap" : [ "AWSRegionAMI", { "Ref" : "AWS::Region" }, "HVM" ]},
+        "IamInstanceProfile": { "Ref" : "InstanceProfile" },
+        "InstanceType" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "t2.medium",
+            "t2.micro"
+          ]},
+        "KeyName" : { "Ref" : "KeyName" },
+        "EbsOptimized" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "true",
+            "false"
+          ]},
+        "NetworkInterfaces" : [{
+          "SubnetId" :  {
+            "Fn::GetAtt": [ "NetworkStackDependency", "mongoPublicSubnet02" ]
+          },
+          "GroupSet" : [{
+            "Fn::GetAtt": [ "NetworkStackDependency", "MongoDBSG" ]
+          }],
+          "AssociatePublicIpAddress" : "true",
+          "DeviceIndex" : "0"
+        }],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [ "", [ "#!/bin/bash -ex\n",
+              "yum install -y aws-cli\n",
+              "function error_exit\n",
+              "{\n",
+              "  /opt/aws/bin/cfn-signal -e 1 ",
+              "  --stack ", { "Ref": "AWS::StackName" },
+              "  --resource NodeC " ,
+              "  --region ", { "Ref" : "AWS::Region" }, "\n",
+              "  exit 1\n",
+              "}\n",
+              "sleep 30\n",
+
+              "while [ ! -e /dev/xvdf ]; do echo 'waiting for /dev/xvdf to attach'; sleep 10; done\n",
+              "mkfs -t ext4 /dev/xvdf\n",
+              "mkdir -p /opt/mongodata\n",
+              "mount /dev/xvdf /opt/mongodata\n",
+              "echo \"/dev/xvdf /mnt/influx ext4 defaults,nofail 0 2\" >> /etc/fstab\n",
+
+
+              "cp /etc/fstab /etc/fstab.orig\n",
+              "echo \"/dev/${DEVICEMAP}       /opt/mongodata   ext4    defaults,nofail        0       2\" >>  /etc/fstab\n",
+              "echo \"After mount\"\n",
+              "mkdir -p /opt/mongodata/keyfile\n",
+
+              "cd /home/ec2-user/\n",
+              "curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O\n",
+              "chmod +x ./awslogs-agent-setup.py\n",
+
+              "/opt/aws/bin/cfn-init -v -s ", { "Ref": "AWS::StackName" },
+              " -r MongoNode --region ", {  "Ref": "AWS::Region" },"\n",
+
+              "yum install -y mongodb-org\n",
+              "chown mongod:mongod /opt/mongodata/\n",
+              "/bin/sed -i \"s/\\/var\\/lib\\/mongo/\\/opt\\/mongodata/g\" /etc/mongod.conf\n",
+              "/bin/sed -i \"s/bindIp/#bindIp/g\" /etc/mongod.conf\n",
+              "/sbin/service mongod start\n",
+              "sleep 30\n",
+
+              "if [[ \"", {"Ref":"Setup"} ,"\" == \"replica\" ]]; then\n",
+              "  /bin/sed -i \"s/#security:/security:\\n   keyFile: \\/opt\\/mongodata\\/keyfile\\/replica_keyfile/g\" /etc/mongod.conf\n",
+              "  /bin/sed -i \"s/#replication:/replication:\\n   replSetName: viviovideoset0/g\" /etc/mongod.conf\n",
+              "  aws s3 cp s3://",{"Ref":"BucketArtefacts"},"/replicaset/",{"Ref":"ReplicaKeyfile"}," /opt/mongodata/keyfile/replica_keyfile\n",
+              "  chown mongod:mongod /opt/mongodata/keyfile/replica_keyfile\n",
+              "  chmod 600 /opt/mongodata/keyfile/replica_keyfile\n",
+              "  service mongod restart\n",
+              "fi\n",
+              "service mongod status\n",
+
+              "# If all went well, signal success\n",
+              "/opt/aws/bin/cfn-signal -e 0 ",
+              "  --stack ", { "Ref": "AWS::StackName" },
+              "  --resource NodeC " ,
+              "  --region ", { "Ref" : "AWS::Region" }, "\n"
+            ]
+            ]
+          }
+        },
+        "Tags" : [
+          {"Key" : "AppName", "Value" : {"Ref":"AppName"}},
+          {"Key" : "Name", "Value" : "NodeC"}
+        ]
+      }
+    },
+
+    "MongoDBDataVol03" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::EC2::Volume",
+      "Properties" : {
+        "Size" : {
+          "Fn::If" : [
+            "CreateProdResources",
+            "40",
+            "10"
+          ]},
+        "VolumeType" : "gp2",
+        "AvailabilityZone" : { "Fn::GetAtt" : [ "NodeA", "AvailabilityZone" ] },
+        "Tags" : [
+          {"Key" : "AppName", "Value" : {"Ref":"AppName"}},
+          {"Key" : "Name", "Value" : "NodeC"}
+        ]
+      },
+      "DeletionPolicy" : "Snapshot"
+    },
+
+    "MongoMountPoint03" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::EC2::VolumeAttachment",
+      "Properties" : {
+        "InstanceId" : { "Ref" : "NodeC" },
+        "VolumeId"  : { "Ref" : "MongoDBDataVol03" },
+        "Device" : "/dev/sdf"
+      }
+    },
+
+
+    "EndPoint1" : {
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : {
+          "Fn::Join" : [ "", [
+            {
+              "Fn::GetAtt": [ "NetworkStackDependency", "HostedZone" ]
+            }, "."
+          ] ]
+        },
+        "Comment" : "DNS name for mongo1.",
+        "Name" :{
+          "Fn::Join" : [ "", [
+
+            {"Fn::If" : [
+            "CreateReplica",
+            "mongo1.",
+            "mongo."
+            ]}, {
+              "Fn::GetAtt": [ "NetworkStackDependency", "HostedZone" ]
+            } ,"."
+          ] ]
+        },
+        "Type" : "CNAME",
+        "TTL" : "360",
+        "ResourceRecords" : [ { "Fn::GetAtt" : [ "NodeA", "PublicDnsName" ] } ]
+      }
+    },
+    "EndPoint2" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : {
+          "Fn::Join" : [ "", [
+            {
+              "Fn::GetAtt": [ "NetworkStackDependency", "HostedZone" ]
+            }, "."
+          ] ]
+        },
+        "Comment" : "DNS name for mongo2.",
+        "Name" :{
+          "Fn::Join" : [ "", [
+            "mongo2.", {
+              "Fn::GetAtt": [ "NetworkStackDependency", "HostedZone" ]
+            } ,"."
+          ] ]
+        },
+        "Type" : "CNAME",
+        "TTL" : "360",
+        "ResourceRecords" : [ { "Fn::GetAtt" : [ "NodeB", "PublicDnsName" ] } ]
+      }
+    },
+    "EndPoint3" : {
+      "Condition" : "CreateReplica",
+      "Type" : "AWS::Route53::RecordSet",
+      "Properties" : {
+        "HostedZoneName" : {
+          "Fn::Join" : [ "", [
+            {
+              "Fn::GetAtt": [ "NetworkStackDependency", "HostedZone" ]
+            }, "."
+          ] ]
+        },
+        "Comment" : "DNS name for mongo3.",
+        "Name" :{
+          "Fn::Join" : [ "", [
+            "mongo3.", {
+              "Fn::GetAtt": [ "NetworkStackDependency", "HostedZone" ]
+            } ,"."
+          ] ]
+        },
+        "Type" : "CNAME",
+        "TTL" : "360",
+        "ResourceRecords" : [ { "Fn::GetAtt" : [ "NodeC", "PublicDnsName" ] } ]
+      }
+    }
+  },
+
+  "Outputs" : {
+
+    "MongoDBInstanceDNS" : {
+      "Condition" : "single",
+      "Value" : {"Fn::Join" : ["", ["mongodb://", {"Fn::GetAtt" : ["NodeA", "PrivateIp"]}, ":27017" ] ]},
+      "Description" : "Private DNS of MongoDB instance"
+    }
+  }
+}

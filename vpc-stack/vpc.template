@@ -28,6 +28,8 @@
       "Type": "String"
     }
 
+
+
   },
 
   "Metadata" : {
@@ -74,6 +76,7 @@
 
     }
   },
+
 
   "Resources" : {
     "MyVPC": {
@@ -1039,6 +1042,7 @@
     }
 
   },
+
   "Outputs" : {
     "VpcId" : {
       "Value" : {"Ref" : "MyVPC"},

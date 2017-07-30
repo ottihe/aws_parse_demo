@@ -5,10 +5,10 @@
   },
   {
     "ParameterKey": "YourIP",
-    "ParameterValue": "A.B.C.D/32"
+    "ParameterValue": "*.*.*.*/32"
   },
   {
     "ParameterKey": "AppStackName",
-    "ParameterValue": "VPC Parse AWS Demo Stack"
+    "ParameterValue": "Parse AWS Demo Stack"
   }
 ]
